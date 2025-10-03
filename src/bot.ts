@@ -43,9 +43,9 @@ export class FeedbackBot {
       if (!existingUser) {
         const newUser: Omit<User, 'created_at'> = {
           id: userId,
-          username: ctx.from.username,
-          first_name: ctx.from.first_name,
-          last_name: ctx.from.last_name,
+          username: ctx.from.username || null,
+          first_name: ctx.from.first_name || null,
+          last_name: ctx.from.last_name || null,
           is_banned: false
         };
         this.database.createUser(newUser);
@@ -285,88 +285,38 @@ export class FeedbackBot {
         // Проверяем, что это уведомление о новой обратной связи
         if ('text' in replyMessage && replyMessage.text && replyMessage.text.includes('📝 Новое сообщение обратной связи:')) {
           try {
-            // Извлекаем ID сообщения из оригинального сообщения
+            // Извлекаем ID пользователя из оригинального сообщения
             const originalText = replyMessage.text;
-            const idMatch = originalText.match(/🆔 ID: (\d+)/);
+            const userIdMatch = originalText.match(/👤 От: .+ \(ID: (\d+)\)/);
             
             console.log('Debug: Original text:', originalText);
-            console.log('Debug: ID match:', idMatch);
+            console.log('Debug: User ID match:', userIdMatch);
             
-            if (idMatch) {
-              const feedbackId = parseInt(idMatch[1]);
-              console.log('Debug: Looking for feedback ID:', feedbackId);
+            if (userIdMatch) {
+              const userId = parseInt(userIdMatch[1]);
+              console.log('Debug: User ID:', userId);
               
-              // Находим сообщение по ID
-              const feedback = this.database.getFeedback(1000); // Получаем много записей для поиска
-              console.log('Debug: Total feedback records:', feedback.length);
-              console.log('Debug: Available IDs:', feedback.map(f => f.id));
+              // Отправляем ответ пользователю
+              await this.bot.telegram.sendMessage(
+                userId,
+                `💬 Ответ от администратора:\n\n${message}`
+              );
               
-              let matchingFeedback = feedback.find(f => f.id === feedbackId);
-              console.log('Debug: Matching feedback by ID:', matchingFeedback);
+              // Находим сообщение по ID пользователя и отмечаем как обработанное
+              const feedback = this.database.getFeedback(100);
+              const userFeedback = feedback.find(f => f.user_id === userId && !f.is_processed);
               
-              // Если не нашли по ID, попробуем найти по тексту и пользователю
-              if (!matchingFeedback) {
-                const userMatch = originalText.match(/👤 От: (.+?)\n/);
-                const messageMatch = originalText.match(/📝 Сообщение: (.+?)\n/);
-                
-                if (userMatch && messageMatch) {
-                  const userName = userMatch[1];
-                  const originalMessage = messageMatch[1];
-                  
-                  console.log('Debug: Searching by user and message:', { userName, originalMessage });
-                  
-                  // Ищем среди последних сообщений
-                  const recentFeedback = this.database.getFeedback(50);
-                  matchingFeedback = recentFeedback.find(f => {
-                    const user = this.database.getUser(f.user_id);
-                    if (!user) return false;
-                    const userDisplayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
-                                          user.username || 
-                                          `ID: ${user.id}`;
-                    return userDisplayName === userName && f.message === originalMessage;
-                  });
-                  
-                  console.log('Debug: Matching feedback by content:', matchingFeedback);
-                }
+              if (userFeedback) {
+                this.database.markFeedbackAsProcessed(userFeedback.id);
+                console.log('Debug: Marked feedback as processed:', userFeedback.id);
               }
               
-              if (matchingFeedback) {
-                let user = this.database.getUser(matchingFeedback.user_id);
-                console.log('Debug: User found:', user);
-                
-                // Если пользователь не найден, создаем его с базовой информацией
-                if (!user) {
-                  console.log('Debug: User not found, creating basic user record');
-                  const basicUser: Omit<User, 'created_at'> = {
-                    id: matchingFeedback.user_id,
-                    username: undefined,
-                    first_name: undefined,
-                    last_name: undefined,
-                    is_banned: false
-                  };
-                  this.database.createUser(basicUser);
-                  user = this.database.getUser(matchingFeedback.user_id);
-                  console.log('Debug: Created basic user:', user);
-                }
-                
-                if (user) {
-                  // Отправляем ответ пользователю
-                  await this.bot.telegram.sendMessage(
-                    user.id,
-                    `💬 Ответ от администратора:\n\n${message}`
-                  );
-                  
-                  // Отмечаем сообщение как обработанное
-                  this.database.markFeedbackAsProcessed(matchingFeedback.id);
-                  
-                  // Подтверждаем администратору
-                  ctx.reply('✅ Ответ отправлен пользователю!');
-                  return;
-                }
-              }
+              // Подтверждаем администратору
+              ctx.reply('✅ Ответ отправлен пользователю!');
+              return;
             }
             
-            ctx.reply('❌ Не удалось найти соответствующее сообщение обратной связи.');
+            ctx.reply('❌ Не удалось найти ID пользователя в сообщении.');
           } catch (error) {
             ctx.reply('❌ Ошибка при отправке ответа пользователю.');
             console.error('Reply error:', error);
@@ -382,9 +332,9 @@ export class FeedbackBot {
         if (!existingUser) {
           const newUser: Omit<User, 'created_at'> = {
             id: ctx.from!.id,
-            username: ctx.from.username,
-            first_name: ctx.from.first_name,
-            last_name: ctx.from.last_name,
+            username: ctx.from.username || null,
+            first_name: ctx.from.first_name || null,
+            last_name: ctx.from.last_name || null,
             is_banned: false
           };
           this.database.createUser(newUser);
@@ -407,7 +357,7 @@ export class FeedbackBot {
           this.config.adminUserId,
           `📝 Новое сообщение обратной связи:\n\n` +
           `🆔 ID: ${feedbackId}\n` +
-          `👤 От: ${userName}\n` +
+          `👤 От: ${userName} (ID: ${ctx.from.id})\n` +
           `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
           `📝 Сообщение: ${message}\n\n` +
           `💬 Ответьте на это сообщение или используйте кнопки ниже`,

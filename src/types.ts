@@ -1,8 +1,8 @@
 export interface User {
   id: number;
-  username?: string;
-  first_name?: string;
-  last_name?: string;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   is_banned: boolean;
   created_at: string;
 }
