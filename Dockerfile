@@ -17,11 +17,14 @@ COPY dist/ ./dist/
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S botuser -u 1001
 
-# Создаем директорию для базы данных
-RUN mkdir -p /app/data && chown -R botuser:nodejs /app
+# Создаем директории для базы данных и логов
+RUN mkdir -p /app/data /app/logs
 
 # Переключаемся на непривилегированного пользователя
 USER botuser
+
+# Убеждаемся что пользователь может создавать файлы
+RUN touch /app/data/.test && rm /app/data/.test || true
 
 # Открываем порт (если понадобится в будущем)
 EXPOSE 3000

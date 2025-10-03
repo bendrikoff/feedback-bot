@@ -130,8 +130,14 @@ jobs:
           ls -la package*.json || echo "package.json не найден"
           
           # Исправляем права доступа к папкам
-          sudo chown -R 1001:1001 ./data ./logs
+          sudo chown -R 1001:1001 ./data ./logs || echo "Не удалось изменить права через sudo"
           chmod -R 755 ./data ./logs
+          
+          # Проверяем права
+          ls -la data/ logs/
+          
+          # Если папка data пустая, создаем файл с правильными правами
+          touch data/test.file && rm data/test.file || echo "Не удалось создать тестовый файл"
           
           # Останавливаем текущий контейнер
           docker-compose down || true
