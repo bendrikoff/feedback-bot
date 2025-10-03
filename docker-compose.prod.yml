@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   feedback-bot:
-    image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/feedback-bot:latest
+    image: ghcr.io/bendrikoff/feedback-bot/feedback-bot:latest
     container_name: feedback-bot
     restart: unless-stopped
     environment:

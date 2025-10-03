@@ -38,10 +38,19 @@ EOF
     echo "⚠️  Не забудьте заполнить .env файл!"
 fi
 
-# Копируем docker-compose.prod.yml если его нет
+# Создаем docker-compose.yml если его нет
 if [ ! -f docker-compose.yml ]; then
     echo "📋 Создаем docker-compose.yml..."
-    cp docker-compose.prod.yml docker-compose.yml
+    if [ -f docker-compose.prod.yml ]; then
+        cp docker-compose.prod.yml docker-compose.yml
+    elif [ -f docker-compose.direct.yml ]; then
+        cp docker-compose.direct.yml docker-compose.yml
+    else
+        echo "❌ Не найден файл docker-compose.prod.yml или docker-compose.direct.yml"
+        echo "📥 Скачиваем файлы из репозитория..."
+        curl -fsSL https://raw.githubusercontent.com/bendrikoff/feedback-bot/master/docker-compose.prod.yml -o docker-compose.prod.yml
+        cp docker-compose.prod.yml docker-compose.yml
+    fi
 fi
 
 # Останавливаем старый контейнер
@@ -50,6 +59,14 @@ docker-compose down || true
 
 # Обновляем образ
 echo "📦 Обновляем Docker образ..."
+
+# Проверяем, используется ли GHCR
+if grep -q "ghcr.io" docker-compose.yml; then
+    echo "🔐 Настраиваем авторизацию для GitHub Container Registry..."
+    echo "⚠️  Для GHCR нужен GitHub Token. Если ошибка авторизации, выполните:"
+    echo "   echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin"
+fi
+
 docker-compose pull
 
 # Запускаем новый контейнер
