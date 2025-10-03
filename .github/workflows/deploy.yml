@@ -50,11 +50,16 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: bot-build
+        path: ./artifacts
         
     - name: Extract artifacts
       run: |
-        echo "📦 Распаковываем артефакты..."
-        ls -la bot-build/ || echo "Проверяем содержимое bot-build/"
+        echo "📦 Проверяем содержимое артефактов..."
+        ls -la
+        echo "📦 Содержимое папки bot-build:"
+        ls -la bot-build/ || echo "Папка bot-build не найдена"
+        echo "📦 Попробуем найти архив артефакта:"
+        find . -name "*.zip" -o -name "bot-build*" 2>/dev/null || echo "Архивы не найдены"
         
     - name: Deploy artifacts to server
       uses: appleboy/scp-action@v0.1.7
@@ -62,7 +67,7 @@ jobs:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
-        source: "bot-build/"
+        source: "artifacts/bot-build/"
         target: "/opt/feedback-bot/"
         
     - name: Build and start on server
