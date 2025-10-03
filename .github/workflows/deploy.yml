@@ -86,9 +86,15 @@ jobs:
           # Создаем необходимые директории
           mkdir -p data logs
           
-          # Создаем docker-compose.yml если файл не найден
-          if [ ! -f docker-compose.yml ]; then
-            cat > docker-compose.yml << 'EOF'
+          # Копируем файлы из артефактов
+          echo "📋 Содержимое папки artifacts:"
+          ls -la artifacts/
+          
+          # Копируем файлы артефактов в корень
+          cp -r artifacts/* . && echo "Файлы скопированы из artifacts/" || echo "Ошибка копирования файлов"
+          
+          # Перезаписываем docker-compose.yml для локальной сборки
+          cat > docker-compose.yml << 'EOF'
           version: '3.8'
           
           services:
@@ -116,7 +122,6 @@ jobs:
             bot-network:
               driver: bridge
           EOF
-          fi
           
           echo "📋 Проверяем созданные файлы:"
           ls -la Dockerfile docker-compose.yml || echo "Файлы не созданы"
