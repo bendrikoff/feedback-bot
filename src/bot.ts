@@ -1,4 +1,4 @@
-import { Telegraf, Context } from 'telegraf';
+import { Telegraf } from 'telegraf';
 import { Database } from './database';
 import { BotConfig, User } from './types';
 
@@ -23,7 +23,7 @@ export class FeedbackBot {
         return next();
       }
 
-      const user = await this.database.getUser(userId);
+      const user = this.database.getUser(userId);
       if (user && user.is_banned) {
         await ctx.reply('❌ Вы заблокированы и не можете использовать бота.');
         return;
@@ -39,7 +39,7 @@ export class FeedbackBot {
         return next();
       }
 
-      const existingUser = await this.database.getUser(userId);
+      const existingUser = this.database.getUser(userId);
       if (!existingUser) {
         const newUser: Omit<User, 'created_at'> = {
           id: userId,
@@ -48,7 +48,7 @@ export class FeedbackBot {
           last_name: ctx.from.last_name,
           is_banned: false
         };
-        await this.database.createUser(newUser);
+        this.database.createUser(newUser);
       }
 
       return next();
@@ -129,7 +129,7 @@ export class FeedbackBot {
       }
 
       try {
-        await this.database.banUser(userId);
+        this.database.banUser(userId);
         ctx.reply(`✅ Пользователь ${userId} заблокирован.`);
       } catch (error) {
         ctx.reply('❌ Ошибка при блокировке пользователя.');
@@ -156,7 +156,7 @@ export class FeedbackBot {
       }
 
       try {
-        await this.database.unbanUser(userId);
+        this.database.unbanUser(userId);
         ctx.reply(`✅ Пользователь ${userId} разблокирован.`);
       } catch (error) {
         ctx.reply('❌ Ошибка при разблокировке пользователя.');
@@ -171,7 +171,7 @@ export class FeedbackBot {
       }
 
       try {
-        const feedback = await this.database.getFeedback(10);
+        const feedback = this.database.getFeedback(10);
         if (feedback.length === 0) {
           ctx.reply('📝 Нет сообщений обратной связи.');
           return;
@@ -179,7 +179,7 @@ export class FeedbackBot {
 
         let message = '📝 Последние сообщения обратной связи:\n\n';
         for (const item of feedback) {
-          const user = await this.database.getUser(item.user_id);
+          const user = this.database.getUser(item.user_id);
           const userName = user ? 
             `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
             user.username || 
@@ -207,7 +207,7 @@ export class FeedbackBot {
       }
 
       try {
-        const bannedUsers = await this.database.getBannedUsers();
+        const bannedUsers = this.database.getBannedUsers();
         if (bannedUsers.length === 0) {
           ctx.reply('✅ Нет заблокированных пользователей.');
           return;
@@ -236,8 +236,8 @@ export class FeedbackBot {
       }
 
       try {
-        const feedback = await this.database.getFeedback(1000); // Получаем больше для статистики
-        const bannedUsers = await this.database.getBannedUsers();
+        const feedback = this.database.getFeedback(1000); // Получаем больше для статистики
+        const bannedUsers = this.database.getBannedUsers();
         
         const totalFeedback = feedback.length;
         const processedFeedback = feedback.filter(f => f.is_processed).length;
@@ -266,7 +266,7 @@ export class FeedbackBot {
       }
 
       try {
-        await this.database.addFeedback(ctx.from!.id, message);
+        this.database.addFeedback(ctx.from!.id, message);
         
         // Уведомляем администратора
         await this.bot.telegram.sendMessage(

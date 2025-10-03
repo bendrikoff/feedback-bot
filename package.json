@@ -16,11 +16,12 @@
   "license": "MIT",
   "dependencies": {
     "telegraf": "^4.15.6",
-    "sqlite3": "^5.1.6",
+    "sql.js": "^1.8.0",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
+    "@types/sql.js": "^1.4.4",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "eslint": "^8.56.0",

@@ -1,12 +1,29 @@
-import sqlite3 from 'sqlite3';
+import initSqlJs from 'sql.js';
 import { User, Feedback, DatabaseConfig } from './types';
+import * as fs from 'fs';
 
 export class Database {
-  private db: sqlite3.Database;
+  private db: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  private config: DatabaseConfig;
 
   constructor(config: DatabaseConfig) {
-    this.db = new sqlite3.Database(config.path);
+    this.config = config;
+    this.initDatabase();
+  }
+
+  private async initDatabase(): Promise<void> {
+    const SQL = await initSqlJs();
+    
+    // Загружаем существующую базу данных или создаем новую
+    if (fs.existsSync(this.config.path)) {
+      const filebuffer = fs.readFileSync(this.config.path);
+      this.db = new SQL.Database(filebuffer);
+    } else {
+      this.db = new SQL.Database();
+    }
+    
     this.initTables();
+    this.saveDatabase();
   }
 
   private initTables(): void {
@@ -35,152 +52,106 @@ export class Database {
     `);
   }
 
-  async getUser(userId: number): Promise<User | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(
-        'SELECT * FROM users WHERE id = ?',
-        [userId],
-        (err, row: any) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(row ? {
-              id: row.id,
-              username: row.username,
-              first_name: row.first_name,
-              last_name: row.last_name,
-              is_banned: Boolean(row.is_banned),
-              created_at: row.created_at
-            } : null);
-          }
-        }
-      );
-    });
+  private saveDatabase(): void {
+    const data = this.db.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(this.config.path, buffer);
   }
 
-  async createUser(user: Omit<User, 'created_at'>): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        'INSERT OR REPLACE INTO users (id, username, first_name, last_name, is_banned) VALUES (?, ?, ?, ?, ?)',
-        [user.id, user.username, user.first_name, user.last_name, user.is_banned ? 1 : 0],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
-    });
+  getUser(userId: number): User | null {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
+    const result = stmt.getAsObject({ ':id': userId });
+    if (!result || Object.keys(result).length === 0) return null;
+    
+    return {
+      id: result.id as number,
+      username: result.username as string,
+      first_name: result.first_name as string,
+      last_name: result.last_name as string,
+      is_banned: Boolean(result.is_banned),
+      created_at: result.created_at as string
+    };
   }
 
-  async banUser(userId: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        'UPDATE users SET is_banned = 1 WHERE id = ?',
-        [userId],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
+  createUser(user: Omit<User, 'created_at'>): void {
+    const stmt = this.db.prepare(
+      'INSERT OR REPLACE INTO users (id, username, first_name, last_name, is_banned) VALUES (:id, :username, :first_name, :last_name, :is_banned)'
+    );
+    stmt.run({
+      ':id': user.id,
+      ':username': user.username,
+      ':first_name': user.first_name,
+      ':last_name': user.last_name,
+      ':is_banned': user.is_banned ? 1 : 0
     });
+    this.saveDatabase();
   }
 
-  async unbanUser(userId: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        'UPDATE users SET is_banned = 0 WHERE id = ?',
-        [userId],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
-    });
+  banUser(userId: number): void {
+    const stmt = this.db.prepare('UPDATE users SET is_banned = 1 WHERE id = :id');
+    stmt.run({ ':id': userId });
+    this.saveDatabase();
   }
 
-  async addFeedback(userId: number, message: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        'INSERT INTO feedback (user_id, message) VALUES (?, ?)',
-        [userId, message],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
-    });
+  unbanUser(userId: number): void {
+    const stmt = this.db.prepare('UPDATE users SET is_banned = 0 WHERE id = :id');
+    stmt.run({ ':id': userId });
+    this.saveDatabase();
   }
 
-  async getFeedback(limit: number = 10, offset: number = 0): Promise<Feedback[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(
-        'SELECT * FROM feedback ORDER BY created_at DESC LIMIT ? OFFSET ?',
-        [limit, offset],
-        (err, rows: any[]) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(rows.map(row => ({
-              id: row.id,
-              user_id: row.user_id,
-              message: row.message,
-              created_at: row.created_at,
-              is_processed: Boolean(row.is_processed)
-            })));
-          }
-        }
-      );
-    });
+  addFeedback(userId: number, message: string): void {
+    const stmt = this.db.prepare('INSERT INTO feedback (user_id, message) VALUES (:user_id, :message)');
+    stmt.run({ ':user_id': userId, ':message': message });
+    this.saveDatabase();
   }
 
-  async markFeedbackAsProcessed(feedbackId: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        'UPDATE feedback SET is_processed = 1 WHERE id = ?',
-        [feedbackId],
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
-    });
+  getFeedback(limit: number = 10, offset: number = 0): Feedback[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM feedback ORDER BY created_at DESC LIMIT :limit OFFSET :offset'
+    );
+    const result = stmt.getAsObject({ ':limit': limit, ':offset': offset });
+    
+    if (!result || Object.keys(result).length === 0) return [];
+    
+    // sql.js возвращает один объект, нам нужно получить все записи
+    const stmtAll = this.db.prepare(
+      'SELECT * FROM feedback ORDER BY created_at DESC LIMIT :limit OFFSET :offset'
+    );
+    const rows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+    while (stmtAll.step()) {
+      rows.push(stmtAll.getAsObject());
+    }
+    
+    return rows.map(row => ({
+      id: row.id as number,
+      user_id: row.user_id as number,
+      message: row.message as string,
+      created_at: row.created_at as string,
+      is_processed: Boolean(row.is_processed)
+    }));
   }
 
-  async getBannedUsers(): Promise<User[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(
-        'SELECT * FROM users WHERE is_banned = 1',
-        [],
-        (err, rows: any[]) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(rows.map(row => ({
-              id: row.id,
-              username: row.username,
-              first_name: row.first_name,
-              last_name: row.last_name,
-              is_banned: Boolean(row.is_banned),
-              created_at: row.created_at
-            })));
-          }
-        }
-      );
-    });
+  markFeedbackAsProcessed(feedbackId: number): void {
+    const stmt = this.db.prepare('UPDATE feedback SET is_processed = 1 WHERE id = :id');
+    stmt.run({ ':id': feedbackId });
+    this.saveDatabase();
+  }
+
+  getBannedUsers(): User[] {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE is_banned = 1');
+    const rows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject());
+    }
+    
+    return rows.map(row => ({
+      id: row.id as number,
+      username: row.username as string,
+      first_name: row.first_name as string,
+      last_name: row.last_name as string,
+      is_banned: Boolean(row.is_banned),
+      created_at: row.created_at as string
+    }));
   }
 
   close(): void {
