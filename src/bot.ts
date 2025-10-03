@@ -331,8 +331,23 @@ export class FeedbackBot {
               }
               
               if (matchingFeedback) {
-                const user = this.database.getUser(matchingFeedback.user_id);
+                let user = this.database.getUser(matchingFeedback.user_id);
                 console.log('Debug: User found:', user);
+                
+                // Если пользователь не найден, создаем его с базовой информацией
+                if (!user) {
+                  console.log('Debug: User not found, creating basic user record');
+                  const basicUser: Omit<User, 'created_at'> = {
+                    id: matchingFeedback.user_id,
+                    username: undefined,
+                    first_name: undefined,
+                    last_name: undefined,
+                    is_banned: false
+                  };
+                  this.database.createUser(basicUser);
+                  user = this.database.getUser(matchingFeedback.user_id);
+                  console.log('Debug: Created basic user:', user);
+                }
                 
                 if (user) {
                   // Отправляем ответ пользователю
@@ -362,13 +377,26 @@ export class FeedbackBot {
 
       // Обычная обработка сообщений обратной связи
       try {
+        // Убеждаемся, что пользователь существует в базе данных
+        const existingUser = this.database.getUser(ctx.from!.id);
+        if (!existingUser) {
+          const newUser: Omit<User, 'created_at'> = {
+            id: ctx.from!.id,
+            username: ctx.from.username,
+            first_name: ctx.from.first_name,
+            last_name: ctx.from.last_name,
+            is_banned: false
+          };
+          this.database.createUser(newUser);
+          console.log('Debug: Created new user:', newUser);
+        }
         
         // Уведомляем администратора
         const userName = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 
                         ctx.from.username || 
                         `ID: ${ctx.from.id}`;
         
-        // Сначала добавляем сообщение в базу данных
+        // Добавляем сообщение в базу данных
         this.database.addFeedback(ctx.from!.id, message);
         
         // Получаем ID добавленного сообщения
