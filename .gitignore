@@ -67,3 +67,8 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Docker
+data/
+logs/
+docker-compose.override.yml

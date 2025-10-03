@@ -1,4 +1,4 @@
-name: Deploy to Server
+name: Deploy to Docker
 
 on:
   workflow_run:
@@ -13,25 +13,67 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
         name: bot-build
         path: ./deploy
         
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}/feedback-bot
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
     - name: Deploy to server
-      run: |
-        echo "🚀 Deployment would happen here"
-        echo "📦 Build artifacts are ready in ./deploy directory"
-        echo "💡 Configure your server deployment script here"
-        echo ""
-        echo "Example deployment commands:"
-        echo "  - Copy files to server: scp -r ./deploy/* user@server:/path/to/bot/"
-        echo "  - Install dependencies: npm install --production"
-        echo "  - Restart bot service: systemctl restart feedback-bot"
-        echo ""
-        echo "🔧 Remember to:"
-        echo "  1. Set up environment variables on server"
-        echo "  2. Configure process manager (PM2, systemd, etc.)"
-        echo "  3. Set up log rotation"
-        echo "  4. Configure monitoring and alerts"
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          # Переходим в директорию проекта
+          cd /opt/feedback-bot
+          
+          # Останавливаем текущий контейнер
+          docker-compose down || true
+          
+          # Обновляем образ из GHCR
+          docker pull ghcr.io/${{ github.repository }}/feedback-bot:latest
+          
+          # Запускаем обновленный контейнер
+          docker-compose up -d
+          
+          # Очищаем старые образы
+          docker image prune -f
+          
+          # Показываем статус
+          docker-compose ps
