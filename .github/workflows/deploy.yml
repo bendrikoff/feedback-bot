@@ -129,6 +129,10 @@ jobs:
           ls -la dist/ || echo "Папка dist не найдена"
           ls -la package*.json || echo "package.json не найден"
           
+          # Исправляем права доступа к папкам
+          sudo chown -R 1001:1001 ./data ./logs
+          chmod -R 755 ./data ./logs
+          
           # Останавливаем текущий контейнер
           docker-compose down || true
           
