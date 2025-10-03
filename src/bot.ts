@@ -289,15 +289,51 @@ export class FeedbackBot {
             const originalText = replyMessage.text;
             const idMatch = originalText.match(/🆔 ID: (\d+)/);
             
+            console.log('Debug: Original text:', originalText);
+            console.log('Debug: ID match:', idMatch);
+            
             if (idMatch) {
               const feedbackId = parseInt(idMatch[1]);
+              console.log('Debug: Looking for feedback ID:', feedbackId);
               
               // Находим сообщение по ID
               const feedback = this.database.getFeedback(1000); // Получаем много записей для поиска
-              const matchingFeedback = feedback.find(f => f.id === feedbackId);
+              console.log('Debug: Total feedback records:', feedback.length);
+              console.log('Debug: Available IDs:', feedback.map(f => f.id));
+              
+              let matchingFeedback = feedback.find(f => f.id === feedbackId);
+              console.log('Debug: Matching feedback by ID:', matchingFeedback);
+              
+              // Если не нашли по ID, попробуем найти по тексту и пользователю
+              if (!matchingFeedback) {
+                const userMatch = originalText.match(/👤 От: (.+?)\n/);
+                const messageMatch = originalText.match(/📝 Сообщение: (.+?)\n/);
+                
+                if (userMatch && messageMatch) {
+                  const userName = userMatch[1];
+                  const originalMessage = messageMatch[1];
+                  
+                  console.log('Debug: Searching by user and message:', { userName, originalMessage });
+                  
+                  // Ищем среди последних сообщений
+                  const recentFeedback = this.database.getFeedback(50);
+                  matchingFeedback = recentFeedback.find(f => {
+                    const user = this.database.getUser(f.user_id);
+                    if (!user) return false;
+                    const userDisplayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
+                                          user.username || 
+                                          `ID: ${user.id}`;
+                    return userDisplayName === userName && f.message === originalMessage;
+                  });
+                  
+                  console.log('Debug: Matching feedback by content:', matchingFeedback);
+                }
+              }
               
               if (matchingFeedback) {
                 const user = this.database.getUser(matchingFeedback.user_id);
+                console.log('Debug: User found:', user);
+                
                 if (user) {
                   // Отправляем ответ пользователю
                   await this.bot.telegram.sendMessage(
