@@ -60,7 +60,8 @@ export class Database {
 
   getUser(userId: number): User | null {
     const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
-    const result = stmt.getAsObject({ ':id': userId });
+    stmt.bind([userId]);
+    const result = stmt.step() ? stmt.getAsObject() : null;
     if (!result || Object.keys(result).length === 0) return null;
     
     return {
@@ -75,51 +76,39 @@ export class Database {
 
   createUser(user: Omit<User, 'created_at'>): void {
     const stmt = this.db.prepare(
-      'INSERT OR REPLACE INTO users (id, username, first_name, last_name, is_banned) VALUES (:id, :username, :first_name, :last_name, :is_banned)'
+      'INSERT OR REPLACE INTO users (id, username, first_name, last_name, is_banned) VALUES (?, ?, ?, ?, ?)'
     );
-    stmt.run({
-      ':id': user.id,
-      ':username': user.username,
-      ':first_name': user.first_name,
-      ':last_name': user.last_name,
-      ':is_banned': user.is_banned ? 1 : 0
-    });
+    stmt.run([user.id, user.username, user.first_name, user.last_name, user.is_banned ? 1 : 0]);
     this.saveDatabase();
   }
 
   banUser(userId: number): void {
-    const stmt = this.db.prepare('UPDATE users SET is_banned = 1 WHERE id = :id');
-    stmt.run({ ':id': userId });
+    const stmt = this.db.prepare('UPDATE users SET is_banned = 1 WHERE id = ?');
+    stmt.run([userId]);
     this.saveDatabase();
   }
 
   unbanUser(userId: number): void {
-    const stmt = this.db.prepare('UPDATE users SET is_banned = 0 WHERE id = :id');
-    stmt.run({ ':id': userId });
+    const stmt = this.db.prepare('UPDATE users SET is_banned = 0 WHERE id = ?');
+    stmt.run([userId]);
     this.saveDatabase();
   }
 
   addFeedback(userId: number, message: string): void {
-    const stmt = this.db.prepare('INSERT INTO feedback (user_id, message) VALUES (:user_id, :message)');
-    stmt.run({ ':user_id': userId, ':message': message });
+    const stmt = this.db.prepare('INSERT INTO feedback (user_id, message) VALUES (?, ?)');
+    stmt.run([userId, message]);
     this.saveDatabase();
   }
 
   getFeedback(limit: number = 10, offset: number = 0): Feedback[] {
     const stmt = this.db.prepare(
-      'SELECT * FROM feedback ORDER BY created_at DESC LIMIT :limit OFFSET :offset'
+      'SELECT * FROM feedback ORDER BY created_at DESC LIMIT ? OFFSET ?'
     );
-    const result = stmt.getAsObject({ ':limit': limit, ':offset': offset });
+    stmt.bind([limit, offset]);
     
-    if (!result || Object.keys(result).length === 0) return [];
-    
-    // sql.js возвращает один объект, нам нужно получить все записи
-    const stmtAll = this.db.prepare(
-      'SELECT * FROM feedback ORDER BY created_at DESC LIMIT :limit OFFSET :offset'
-    );
     const rows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
-    while (stmtAll.step()) {
-      rows.push(stmtAll.getAsObject());
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject());
     }
     
     return rows.map(row => ({
@@ -132,8 +121,8 @@ export class Database {
   }
 
   markFeedbackAsProcessed(feedbackId: number): void {
-    const stmt = this.db.prepare('UPDATE feedback SET is_processed = 1 WHERE id = :id');
-    stmt.run({ ':id': feedbackId });
+    const stmt = this.db.prepare('UPDATE feedback SET is_processed = 1 WHERE id = ?');
+    stmt.run([feedbackId]);
     this.saveDatabase();
   }
 
