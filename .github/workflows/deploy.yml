@@ -42,7 +42,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ghcr.io/${{ github.repository }}/feedback-bot
+        images: ghcr.io/${{ github.actor }}/feedback-bot
         tags: |
           type=ref,event=branch
           type=sha,prefix={{branch}}-
