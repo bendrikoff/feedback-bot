@@ -51,20 +51,13 @@ jobs:
       with:
         name: bot-build
         
-    - name: List downloaded files
-      run: |
-        echo "📋 Содержимое рабочей директории:"
-        ls -la
-        echo "📋 Содержимое bot-build:"
-        ls -la bot-build/ || echo "Папка bot-build не найдена"
-        
     - name: Deploy artifacts to server
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
-        source: "bot-build/*"
+        source: "dist/ package*.json Dockerfile docker-compose.direct.yml env.example ecosystem.config.js"
         target: "/opt/feedback-bot/"
         
     - name: Build and start on server
