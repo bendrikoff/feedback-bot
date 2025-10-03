@@ -1,4 +1,4 @@
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
 import { Database } from './database';
 import { BotConfig, User } from './types';
 
@@ -194,7 +194,19 @@ export class FeedbackBot {
           message += `${item.is_processed ? '✅ Обработано' : '⏳ Не обработано'}\n\n`;
         }
 
-        ctx.reply(message);
+        ctx.reply(message, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                Markup.button.callback('🔄 Обновить список', 'refresh_feedback_list'),
+                Markup.button.callback('📊 Статистика', 'show_stats')
+              ],
+              [
+                Markup.button.callback('🚫 Заблокированные', 'show_banned_users')
+              ]
+            ]
+          }
+        });
       } catch (error) {
         ctx.reply('❌ Ошибка при получении списка обратной связи.');
         console.error('Feedback list error:', error);
@@ -336,7 +348,20 @@ export class FeedbackBot {
           `👤 От: ${userName}\n` +
           `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
           `📝 Сообщение: ${message}\n\n` +
-          `💬 Ответьте на это сообщение, чтобы отправить ответ пользователю`
+          `💬 Ответьте на это сообщение или используйте кнопки ниже`,
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  Markup.button.callback('✅ Обработано', `process_${ctx.from.id}_${Date.now()}`),
+                  Markup.button.callback('❌ Спам', `spam_${ctx.from.id}_${Date.now()}`)
+                ],
+                [
+                  Markup.button.callback('🚫 Заблокировать', `ban_${ctx.from.id}`)
+                ]
+              ]
+            }
+          }
         );
 
         ctx.reply(
@@ -346,6 +371,247 @@ export class FeedbackBot {
       } catch (error) {
         ctx.reply('❌ Произошла ошибка при отправке сообщения. Попробуйте позже.');
         console.error('Feedback error:', error);
+      }
+    });
+
+    // Обработка callback кнопок
+    this.bot.action(/^process_(\d+)_(\d+)$/, async (ctx) => {
+      if (ctx.from?.id !== this.config.adminUserId) {
+        ctx.answerCbQuery('❌ У вас нет прав администратора.');
+        return;
+      }
+
+      const userId = parseInt(ctx.match[1]);
+      const timestamp = parseInt(ctx.match[2]);
+      
+      try {
+        // Находим последнее сообщение от этого пользователя
+        const feedback = this.database.getFeedback(50);
+        const userFeedback = feedback.find(f => f.user_id === userId);
+        
+        if (userFeedback) {
+          this.database.markFeedbackAsProcessed(userFeedback.id);
+          ctx.answerCbQuery('✅ Сообщение отмечено как обработанное');
+          
+          // Обновляем сообщение с кнопками
+          ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+              [
+                Markup.button.callback('✅ Обработано', `processed_${userId}_${timestamp}`, true),
+                Markup.button.callback('❌ Спам', `spam_${userId}_${timestamp}`)
+              ],
+              [
+                Markup.button.callback('🚫 Заблокировать', `ban_${userId}`)
+              ]
+            ]
+          });
+        } else {
+          ctx.answerCbQuery('❌ Сообщение не найдено');
+        }
+      } catch (error) {
+        ctx.answerCbQuery('❌ Ошибка при обработке');
+        console.error('Process callback error:', error);
+      }
+    });
+
+    this.bot.action(/^spam_(\d+)_(\d+)$/, async (ctx) => {
+      if (ctx.from?.id !== this.config.adminUserId) {
+        ctx.answerCbQuery('❌ У вас нет прав администратора.');
+        return;
+      }
+
+      const userId = parseInt(ctx.match[1]);
+      const timestamp = parseInt(ctx.match[2]);
+      
+      try {
+        // Находим последнее сообщение от этого пользователя
+        const feedback = this.database.getFeedback(50);
+        const userFeedback = feedback.find(f => f.user_id === userId);
+        
+        if (userFeedback) {
+          this.database.markFeedbackAsProcessed(userFeedback.id);
+          ctx.answerCbQuery('❌ Сообщение отмечено как спам');
+          
+          // Обновляем сообщение с кнопками
+          ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+              [
+                Markup.button.callback('✅ Обработано', `process_${userId}_${timestamp}`),
+                Markup.button.callback('❌ Спам', `spammed_${userId}_${timestamp}`, true)
+              ],
+              [
+                Markup.button.callback('🚫 Заблокировать', `ban_${userId}`)
+              ]
+            ]
+          });
+        } else {
+          ctx.answerCbQuery('❌ Сообщение не найдено');
+        }
+      } catch (error) {
+        ctx.answerCbQuery('❌ Ошибка при обработке');
+        console.error('Spam callback error:', error);
+      }
+    });
+
+    this.bot.action(/^ban_(\d+)$/, async (ctx) => {
+      if (ctx.from?.id !== this.config.adminUserId) {
+        ctx.answerCbQuery('❌ У вас нет прав администратора.');
+        return;
+      }
+
+      const userId = parseInt(ctx.match[1]);
+      
+      try {
+        this.database.banUser(userId);
+        ctx.answerCbQuery('🚫 Пользователь заблокирован');
+        
+        // Обновляем сообщение с кнопками
+        ctx.editMessageReplyMarkup({
+          inline_keyboard: [
+            [
+              Markup.button.callback('✅ Обработано', `process_${userId}_${Date.now()}`),
+              Markup.button.callback('❌ Спам', `spam_${userId}_${Date.now()}`)
+            ],
+            [
+              Markup.button.callback('🚫 Заблокирован', `banned_${userId}`, true)
+            ]
+          ]
+        });
+      } catch (error) {
+        ctx.answerCbQuery('❌ Ошибка при блокировке');
+        console.error('Ban callback error:', error);
+      }
+    });
+
+    // Обработка уже обработанных кнопок (disabled)
+    this.bot.action(/^(processed|spammed|banned)_/, (ctx) => {
+      ctx.answerCbQuery('Это действие уже выполнено');
+    });
+
+    // Обработка кнопок управления
+    this.bot.action('refresh_feedback_list', async (ctx) => {
+      if (ctx.from?.id !== this.config.adminUserId) {
+        ctx.answerCbQuery('❌ У вас нет прав администратора.');
+        return;
+      }
+
+      try {
+        const feedback = this.database.getFeedback(10);
+        if (feedback.length === 0) {
+          ctx.editMessageText('📝 Нет сообщений обратной связи.');
+          return;
+        }
+
+        let message = '📝 Последние сообщения обратной связи:\n\n';
+        for (const item of feedback) {
+          const user = this.database.getUser(item.user_id);
+          const userName = user ? 
+            `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
+            user.username || 
+            `ID: ${user.id}` : 
+            `ID: ${item.user_id}`;
+          
+          message += `🆔 ID: ${item.id}\n`;
+          message += `👤 От: ${userName}\n`;
+          message += `📅 Дата: ${new Date(item.created_at).toLocaleString('ru-RU')}\n`;
+          message += `📝 Сообщение: ${item.message}\n`;
+          message += `${item.is_processed ? '✅ Обработано' : '⏳ Не обработано'}\n\n`;
+        }
+
+        ctx.editMessageText(message, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                Markup.button.callback('🔄 Обновить список', 'refresh_feedback_list'),
+                Markup.button.callback('📊 Статистика', 'show_stats')
+              ],
+              [
+                Markup.button.callback('🚫 Заблокированные', 'show_banned_users')
+              ]
+            ]
+          }
+        });
+        ctx.answerCbQuery('✅ Список обновлен');
+      } catch (error) {
+        ctx.answerCbQuery('❌ Ошибка при обновлении');
+        console.error('Refresh feedback list error:', error);
+      }
+    });
+
+    this.bot.action('show_stats', async (ctx) => {
+      if (ctx.from?.id !== this.config.adminUserId) {
+        ctx.answerCbQuery('❌ У вас нет прав администратора.');
+        return;
+      }
+
+      try {
+        const feedback = this.database.getFeedback(1000);
+        const bannedUsers = this.database.getBannedUsers();
+        
+        const totalFeedback = feedback.length;
+        const processedFeedback = feedback.filter(f => f.is_processed).length;
+        const unprocessedFeedback = totalFeedback - processedFeedback;
+
+        const statsMessage = 
+          '📊 Статистика бота:\n\n' +
+          `📝 Всего сообщений обратной связи: ${totalFeedback}\n` +
+          `✅ Обработано: ${processedFeedback}\n` +
+          `⏳ Не обработано: ${unprocessedFeedback}\n` +
+          `🚫 Заблокированных пользователей: ${bannedUsers.length}`;
+
+        ctx.editMessageText(statsMessage, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                Markup.button.callback('📝 Список сообщений', 'refresh_feedback_list'),
+                Markup.button.callback('🚫 Заблокированные', 'show_banned_users')
+              ]
+            ]
+          }
+        });
+        ctx.answerCbQuery('📊 Статистика показана');
+      } catch (error) {
+        ctx.answerCbQuery('❌ Ошибка при получении статистики');
+        console.error('Show stats error:', error);
+      }
+    });
+
+    this.bot.action('show_banned_users', async (ctx) => {
+      if (ctx.from?.id !== this.config.adminUserId) {
+        ctx.answerCbQuery('❌ У вас нет прав администратора.');
+        return;
+      }
+
+      try {
+        const bannedUsers = this.database.getBannedUsers();
+        if (bannedUsers.length === 0) {
+          ctx.editMessageText('✅ Нет заблокированных пользователей.');
+          return;
+        }
+
+        let message = '🚫 Заблокированные пользователи:\n\n';
+        for (const user of bannedUsers) {
+          const userName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
+                          user.username || 
+                          `ID: ${user.id}`;
+          message += `👤 ${userName} (ID: ${user.id})\n`;
+          message += `📅 Заблокирован: ${new Date(user.created_at).toLocaleString('ru-RU')}\n\n`;
+        }
+
+        ctx.editMessageText(message, {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                Markup.button.callback('📝 Список сообщений', 'refresh_feedback_list'),
+                Markup.button.callback('📊 Статистика', 'show_stats')
+              ]
+            ]
+          }
+        });
+        ctx.answerCbQuery('🚫 Список заблокированных показан');
+      } catch (error) {
+        ctx.answerCbQuery('❌ Ошибка при получении списка');
+        console.error('Show banned users error:', error);
       }
     });
   }
