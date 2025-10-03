@@ -80,8 +80,11 @@ jobs:
           # Переходим в директорию проекта
           cd /opt/feedback-bot
           
-          # Копируем необходимые файлы для Docker
-          cp ../feedback-bot/docker-compose.direct.yml ./docker-compose.yml || echo "docker-compose.direct.yml не найден"
+          echo "📋 Содержимое директории /opt/feedback-bot:"
+          ls -la
+          
+          # Создаем необходимые директории
+          mkdir -p data logs
           
           # Создаем docker-compose.yml если файл не найден
           if [ ! -f docker-compose.yml ]; then
@@ -114,6 +117,12 @@ jobs:
               driver: bridge
           EOF
           fi
+          
+          echo "📋 Проверяем созданные файлы:"
+          ls -la Dockerfile docker-compose.yml || echo "Файлы не созданы"
+          echo "📋 Проверяем файлы собранного проекта:"
+          ls -la dist/ || echo "Папка dist не найдена"
+          ls -la package*.json || echo "package.json не найден"
           
           # Останавливаем текущий контейнер
           docker-compose down || true
