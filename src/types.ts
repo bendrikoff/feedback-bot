@@ -13,6 +13,7 @@ export interface Feedback {
   message: string;
   created_at: string;
   is_processed: boolean;
+  is_spam: boolean;
 }
 
 export interface DatabaseConfig {

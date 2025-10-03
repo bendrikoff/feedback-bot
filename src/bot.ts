@@ -285,25 +285,16 @@ export class FeedbackBot {
         // Проверяем, что это уведомление о новой обратной связи
         if ('text' in replyMessage && replyMessage.text && replyMessage.text.includes('📝 Новое сообщение обратной связи:')) {
           try {
-            // Извлекаем информацию о пользователе из оригинального сообщения
+            // Извлекаем ID сообщения из оригинального сообщения
             const originalText = replyMessage.text;
-            const userMatch = originalText.match(/👤 От: (.+?)\n/);
-            const messageMatch = originalText.match(/📝 Сообщение: (.+?)\n/);
+            const idMatch = originalText.match(/🆔 ID: (\d+)/);
             
-            if (userMatch && messageMatch) {
-              const userName = userMatch[1];
-              const originalMessage = messageMatch[1];
+            if (idMatch) {
+              const feedbackId = parseInt(idMatch[1]);
               
-              // Находим пользователя по имени в базе данных
-              const feedback = this.database.getFeedback(100); // Получаем больше записей для поиска
-              const matchingFeedback = feedback.find(f => {
-                const user = this.database.getUser(f.user_id);
-                if (!user) return false;
-                const userDisplayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
-                                      user.username || 
-                                      `ID: ${user.id}`;
-                return userDisplayName === userName && f.message === originalMessage;
-              });
+              // Находим сообщение по ID
+              const feedback = this.database.getFeedback(1000); // Получаем много записей для поиска
+              const matchingFeedback = feedback.find(f => f.id === feedbackId);
               
               if (matchingFeedback) {
                 const user = this.database.getUser(matchingFeedback.user_id);
@@ -335,16 +326,23 @@ export class FeedbackBot {
 
       // Обычная обработка сообщений обратной связи
       try {
-        this.database.addFeedback(ctx.from!.id, message);
         
         // Уведомляем администратора
         const userName = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 
                         ctx.from.username || 
                         `ID: ${ctx.from.id}`;
         
+        // Сначала добавляем сообщение в базу данных
+        this.database.addFeedback(ctx.from!.id, message);
+        
+        // Получаем ID добавленного сообщения
+        const feedback = this.database.getFeedback(1);
+        const feedbackId = feedback[0]?.id || 1;
+        
         await this.bot.telegram.sendMessage(
           this.config.adminUserId,
           `📝 Новое сообщение обратной связи:\n\n` +
+          `🆔 ID: ${feedbackId}\n` +
           `👤 От: ${userName}\n` +
           `📅 Дата: ${new Date().toLocaleString('ru-RU')}\n` +
           `📝 Сообщение: ${message}\n\n` +
@@ -353,8 +351,7 @@ export class FeedbackBot {
             reply_markup: {
               inline_keyboard: [
                 [
-                  Markup.button.callback('✅ Обработано', `process_${ctx.from.id}_${Date.now()}`),
-                  Markup.button.callback('❌ Спам', `spam_${ctx.from.id}_${Date.now()}`)
+                  Markup.button.callback('✅ Обработано', `process_${feedbackId}`)
                 ],
                 [
                   Markup.button.callback('🚫 Заблокировать', `ban_${ctx.from.id}`)
@@ -375,83 +372,35 @@ export class FeedbackBot {
     });
 
     // Обработка callback кнопок
-    this.bot.action(/^process_(\d+)_(\d+)$/, async (ctx) => {
+    this.bot.action(/^process_(\d+)$/, async (ctx) => {
       if (ctx.from?.id !== this.config.adminUserId) {
         ctx.answerCbQuery('❌ У вас нет прав администратора.');
         return;
       }
 
-      const userId = parseInt(ctx.match[1]);
-      const timestamp = parseInt(ctx.match[2]);
+      const feedbackId = parseInt(ctx.match[1]);
       
       try {
-        // Находим последнее сообщение от этого пользователя
-        const feedback = this.database.getFeedback(50);
-        const userFeedback = feedback.find(f => f.user_id === userId);
+        this.database.markFeedbackAsProcessed(feedbackId);
+        ctx.answerCbQuery('✅ Сообщение отмечено как обработанное');
         
-        if (userFeedback) {
-          this.database.markFeedbackAsProcessed(userFeedback.id);
-          ctx.answerCbQuery('✅ Сообщение отмечено как обработанное');
-          
-          // Обновляем сообщение с кнопками
-          ctx.editMessageReplyMarkup({
-            inline_keyboard: [
-              [
-                Markup.button.callback('✅ Обработано', `processed_${userId}_${timestamp}`, true),
-                Markup.button.callback('❌ Спам', `spam_${userId}_${timestamp}`)
-              ],
-              [
-                Markup.button.callback('🚫 Заблокировать', `ban_${userId}`)
-              ]
+        // Обновляем сообщение с кнопками
+        ctx.editMessageReplyMarkup({
+          inline_keyboard: [
+            [
+              Markup.button.callback('✅ Обработано', `processed_${feedbackId}`, true)
+            ],
+            [
+              Markup.button.callback('🚫 Заблокировать', `ban_${feedbackId}`)
             ]
-          });
-        } else {
-          ctx.answerCbQuery('❌ Сообщение не найдено');
-        }
+          ]
+        });
       } catch (error) {
         ctx.answerCbQuery('❌ Ошибка при обработке');
         console.error('Process callback error:', error);
       }
     });
 
-    this.bot.action(/^spam_(\d+)_(\d+)$/, async (ctx) => {
-      if (ctx.from?.id !== this.config.adminUserId) {
-        ctx.answerCbQuery('❌ У вас нет прав администратора.');
-        return;
-      }
-
-      const userId = parseInt(ctx.match[1]);
-      const timestamp = parseInt(ctx.match[2]);
-      
-      try {
-        // Находим последнее сообщение от этого пользователя
-        const feedback = this.database.getFeedback(50);
-        const userFeedback = feedback.find(f => f.user_id === userId);
-        
-        if (userFeedback) {
-          this.database.markFeedbackAsProcessed(userFeedback.id);
-          ctx.answerCbQuery('❌ Сообщение отмечено как спам');
-          
-          // Обновляем сообщение с кнопками
-          ctx.editMessageReplyMarkup({
-            inline_keyboard: [
-              [
-                Markup.button.callback('✅ Обработано', `process_${userId}_${timestamp}`),
-                Markup.button.callback('❌ Спам', `spammed_${userId}_${timestamp}`, true)
-              ],
-              [
-                Markup.button.callback('🚫 Заблокировать', `ban_${userId}`)
-              ]
-            ]
-          });
-        } else {
-          ctx.answerCbQuery('❌ Сообщение не найдено');
-        }
-      } catch (error) {
-        ctx.answerCbQuery('❌ Ошибка при обработке');
-        console.error('Spam callback error:', error);
-      }
-    });
 
     this.bot.action(/^ban_(\d+)$/, async (ctx) => {
       if (ctx.from?.id !== this.config.adminUserId) {
@@ -459,24 +408,31 @@ export class FeedbackBot {
         return;
       }
 
-      const userId = parseInt(ctx.match[1]);
+      const feedbackId = parseInt(ctx.match[1]);
       
       try {
-        this.database.banUser(userId);
-        ctx.answerCbQuery('🚫 Пользователь заблокирован');
+        // Находим сообщение по ID, чтобы получить user_id
+        const feedback = this.database.getFeedback(1000);
+        const matchingFeedback = feedback.find(f => f.id === feedbackId);
         
-        // Обновляем сообщение с кнопками
-        ctx.editMessageReplyMarkup({
-          inline_keyboard: [
-            [
-              Markup.button.callback('✅ Обработано', `process_${userId}_${Date.now()}`),
-              Markup.button.callback('❌ Спам', `spam_${userId}_${Date.now()}`)
-            ],
-            [
-              Markup.button.callback('🚫 Заблокирован', `banned_${userId}`, true)
+        if (matchingFeedback) {
+          this.database.banUser(matchingFeedback.user_id);
+          ctx.answerCbQuery('🚫 Пользователь заблокирован');
+          
+          // Обновляем сообщение с кнопками
+          ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+              [
+                Markup.button.callback('✅ Обработано', `process_${feedbackId}`)
+              ],
+              [
+                Markup.button.callback('🚫 Заблокирован', `banned_${feedbackId}`, true)
+              ]
             ]
-          ]
-        });
+          });
+        } else {
+          ctx.answerCbQuery('❌ Сообщение не найдено');
+        }
       } catch (error) {
         ctx.answerCbQuery('❌ Ошибка при блокировке');
         console.error('Ban callback error:', error);
@@ -484,7 +440,7 @@ export class FeedbackBot {
     });
 
     // Обработка уже обработанных кнопок (disabled)
-    this.bot.action(/^(processed|spammed|banned)_/, (ctx) => {
+    this.bot.action(/^(processed|banned)_/, (ctx) => {
       ctx.answerCbQuery('Это действие уже выполнено');
     });
 

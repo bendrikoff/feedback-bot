@@ -47,6 +47,7 @@ export class Database {
         message TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_processed INTEGER DEFAULT 0,
+        is_spam INTEGER DEFAULT 0,
         FOREIGN KEY (user_id) REFERENCES users (id)
       )
     `);
@@ -116,12 +117,19 @@ export class Database {
       user_id: row.user_id as number,
       message: row.message as string,
       created_at: row.created_at as string,
-      is_processed: Boolean(row.is_processed)
+      is_processed: Boolean(row.is_processed),
+      is_spam: Boolean(row.is_spam)
     }));
   }
 
   markFeedbackAsProcessed(feedbackId: number): void {
     const stmt = this.db.prepare('UPDATE feedback SET is_processed = 1 WHERE id = ?');
+    stmt.run([feedbackId]);
+    this.saveDatabase();
+  }
+
+  markFeedbackAsSpam(feedbackId: number): void {
+    const stmt = this.db.prepare('UPDATE feedback SET is_spam = 1, is_processed = 1 WHERE id = ?');
     stmt.run([feedbackId]);
     this.saveDatabase();
   }
