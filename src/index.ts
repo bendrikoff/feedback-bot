@@ -17,7 +17,7 @@ for (const envVar of requiredEnvVars) {
 
 const config: BotConfig = {
   token: process.env.BOT_TOKEN!,
-  adminUserId: parseInt(process.env.ADMIN_USER_ID!),
+  adminUserId: parseInt(String(process.env.ADMIN_USER_ID).replace(/['"]/g, '')),
   databasePath: process.env.DATABASE_PATH || './database.sqlite'
 };
 
