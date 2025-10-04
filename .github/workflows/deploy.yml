@@ -35,9 +35,7 @@ jobs:
           dist/
           package*.json
           Dockerfile
-          docker-compose.direct.yml
           env.example
-          ecosystem.config.js
         retention-days: 1
         
   deploy:
