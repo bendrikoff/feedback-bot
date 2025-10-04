@@ -17,14 +17,13 @@ for (const envVar of requiredEnvVars) {
 
 const config: BotConfig = {
   token: process.env.BOT_TOKEN!,
-  adminUserId: parseInt(String(process.env.ADMIN_USER_ID).replace(/['"]/g, '')),
+  adminUserId: parseInt(process.env.ADMIN_USER_ID!),
   databasePath: process.env.DATABASE_PATH || './database.sqlite'
 };
 
 // Проверяем корректность adminUserId
-if (isNaN(config.adminUserId) || config.adminUserId === 0) {
+if (isNaN(config.adminUserId)) {
   console.error('❌ Ошибка: ADMIN_USER_ID должен быть числом');
-  console.error(`📝 Текущее значение: "${process.env.ADMIN_USER_ID}"`);
   process.exit(1);
 }
 
