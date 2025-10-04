@@ -22,8 +22,9 @@ const config: BotConfig = {
 };
 
 // Проверяем корректность adminUserId
-if (isNaN(config.adminUserId)) {
+if (isNaN(config.adminUserId) || config.adminUserId === 0) {
   console.error('❌ Ошибка: ADMIN_USER_ID должен быть числом');
+  console.error(`📝 Текущее значение: "${process.env.ADMIN_USER_ID}"`);
   process.exit(1);
 }
 
